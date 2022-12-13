@@ -2,70 +2,109 @@
 
 .section .text
 count_above:
+	push %rbp
+	movq %rsp, %rbp	
+	push %rbx
+	push %r15
+	push %r14
+	push %r13
+	push %r12
 	#part 1: find and open
 	#rdi=separator , rsi=limit
 	movq %rdi, %rbx 	#rbx=separator
-	mov %rsi, %r15 	#rcx=limit
-	leaq temp(%rip), %r13 #r13 = temp
+	mov %rsi, %r15 		#r15=limit
 	
-	push %rbp
-	movq %rsp, %rbp
+
 	callq get_path
 	#rax= file path
-	movq %rax, %r9		#rdi = file_path
+	movq %rax, %r9		#r9 = file_path
 	
 	#open
 	movq %r9, %rdi		
 	movq $2, %rax
 	movq $0, %rsi
 	syscall
+	movq %rax, %r13
+
 	
+	movq $0 , %r11  #r11 = counter above limit
+	sub $20, %rsp  	#allocating 20 bytes in the stack
+get_next_number:	
+	movq $0, %r10  #r10 = i = 0
+	leaq (%rsp, %r10, 1), %rcx  #rcx will contain an adress to memory we would like to read to
 	
 	#part 2: reading
 	#rax= file descriptor
-	movq %rax, %rdi
+
+read_rcx:
+	movq %r13, %rdi
 	movq $0, %rax 
-	leaq buffer(%rip), %rsi
-	movq $19, %rdx
+	leaq (%rcx), %rsi
+	movq $1, %rdx
+	push %rcx
+	push %r11
+	push %r13
 	syscall
-	# in resi we have the content of the txt
+	# in (rcx) we have the byte read from the syscall
+	pop %r13
+	pop %r11
+	pop %rcx
 	
-	movq $0, %rdx  		#rdx= counter above limit
-	movq $0, %r10  		#r10 = index
-	movq $0, %r11
-loop:
-	movb (%rsi, %r10, 1), %r11b
-	movq $0, %r12
-	cmpb $45, %r11b
+check_if_EOF:
+	cmpq $0, %rax
+	je finished
+	
+check_if_nagative:
+	movq $0, %r12  	#r12 = flag for nagative number
+	cmpb $45, (%rcx)
 	jne not_makaf
-	inc %r10
 	movq $1, %r12       	#if r12 == 1 it means we are in a negative number
+	jmp loop_next_digit
 not_makaf:
-	movq $0, %r8 			#r8 = (counter for temp) 
-get_next_digit:
-	movb (%rsi, %r10, 1), %r11b    #r11b = buff[i]
+	inc %r10
+
+loop_next_digit:
+	movq %r13, %rdi
+	leaq (%rsp, %r10, 1), %rcx
+	movq $0, %rax 
+	leaq (%rcx), %rsi
+	movq $1, %rdx
+	push %rcx
+	push %r11
+	push %r13
+	syscall   	# in (rcx) we have the byte read from the syscall
+	pop %r13
+	pop %r11
+	pop %rcx
 	
+check_if_number:
+	cmpq $0, %rax
+	je end_word
 	#check if buff[i] is digit
-	cmpq $48, %r11
+	cmpb $48, (%rcx)
 	jb end_word
-	cmpq $57, %r11
+	cmpb $57, (%rcx)
 	ja end_word
+	inc %r10
+	jmp loop_next_digit
 	#end of check is digit
 	
-	leaq (%r13, %r8, 1), %r14  #r14 = temp[j]
-	movb %r11b, (%r14)			#temp[j] = buff[i]
-	inc %r10
-	inc %r8
-	jmp get_next_digit
-	
 end_word:
-	leaq (%r13, %r8, 1), %r14 
-	movb $0, (%r14)
-	movq %r13, %rdi				#rdi = &temp
+	movq $0, %r14
+	cmpq $0, %rax
+	jne not_end_of_file
+	movq $1, %r14
+not_end_of_file:
+	movb $0, (%rcx) 
 	
 	#PreLog 
-	push %rdx
-	push %rsi
+	leaq (%rsp), %rdi 
+	push %rcx
+	push %rbx
+	push %r15
+	push %r14
+	push %r13
+	push %r12
 	push %r11
 	push %r10
 	push %rbp
@@ -76,34 +115,35 @@ end_word:
 	pop %rbp
 	pop %r10
 	pop %r11
-	pop %rsi
-	pop %rdx
+	pop %r12
+	pop %r13
+	pop %r14
+	pop %r15
+	pop %rbx
+	pop %rcx
 	# rax = current number
 	
-	cmpq $0, %r12
-	je positive
-	
+	cmpq $1, %r12
+	jne positive
 negative:
 	not %rax
 	inc %rax
-	
 positive:
 	cmpq %r15, %rax
 	jle check_if_end
-	inc %rdx
+	inc %r11
 	
 check_if_end:
-	cmpq $0, %r11			# if buf[i] == EOF
-	je end_func
-	inc %r10
-	jmp loop
+	cmpq $0, %r14
+	je get_next_number
 	
-end_func:
-	movq %rdx, %rax
+finished:
+	movq %r11, %rax
+	add $20, %rsp
+	pop %r12
+	pop %r13
+	pop %r14
+	pop %r15
+	pop %rbx
 	leave
 	ret
-
-.section .data
-buffer: .zero 20
-temp: .zero 20
-
